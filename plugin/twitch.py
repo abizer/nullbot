@@ -33,6 +33,9 @@ async def monitor_streams(bot, room, twitch_client_id):
     while True:
         rows = await conn.fetch("select username from twitch")
         users = [ r['username'] for r in rows ]
+        if not users:
+            await asyncio.sleep(30)
+
         params = { 'user_login': users }
         resp = None
         async with httpx.AsyncClient(http2=True) as client:
