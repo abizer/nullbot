@@ -1,15 +1,16 @@
 import asyncio
+import asyncpg
 import httpx
 import os
 import re
-import asyncpg
 
+from asyncpg.exceptions import UniqueViolationError
 from datetime import datetime
 from datetime import timedelta
 from functools import partial
 from nio import RoomMessageText
 from nio.responses import RoomResolveAliasError
-from asyncpg.exceptions import UniqueViolationError
+from util import async_retry_except
 
 # https://dev.twitch.tv/docs/api/reference#get-streams
 TWITCH_TV = 'https://twitch.tv'
@@ -19,6 +20,7 @@ TWITCH_DATE_FMT = '%Y-%m-%dT%H:%M:%SZ'
 twitch_add_re = re.compile(r'^!twitch (add|rm) (.+)$')
 twitch_ls_re = re.compile(r'^!twitch ls(?: ([a-zA-Z0-9]+))?$')
 
+@async_retry_except
 async def monitor_streams(bot, room, twitch_client_id):
     conn = bot.pgc
     headers = {
@@ -37,8 +39,8 @@ async def monitor_streams(bot, room, twitch_client_id):
             try:
                 resp = await client.get(TWITCH_STREAMS, headers=headers,  params=params)
                 timeout = 1
-            except asyncio.exceptions.TimeoutError as e:
-                print(f"Timeout when contacting {TWITCH_STREAMS}. Consecutive={timeout}")
+            except BaseException as e:
+                print(f"error when contacting {TWITCH_STREAMS}. Consecutive={timeout}")
                 await asyncio.sleep(timeout * 100)
                 timeout += timeout
                 continue
