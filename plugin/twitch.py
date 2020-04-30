@@ -27,41 +27,37 @@ async def monitor_streams(bot, room, twitch_client_id):
     }
 
     live = frozenset()
-    timeout = 1
     while True:
-        rows = await conn.fetch("select username from twitch")
-        users = [ r['username'] for r in rows ]
-        params = { 'user_login': users }
-        resp = None
-        async with httpx.AsyncClient(http2=True) as client:
-            try:
+        try:
+            rows = await conn.fetch("select username from twitch")
+            users = [ r['username'] for r in rows ]
+            params = { 'user_login': users }
+            resp = None
+            async with httpx.AsyncClient() as client:
                 resp = await client.get(TWITCH_STREAMS, headers=headers,  params=params)
-                timeout = 1
-            except asyncio.exceptions.TimeoutError as e:
-                print(f"Timeout when contacting {TWITCH_STREAMS}. Consecutive={timeout}")
-                await asyncio.sleep(timeout * 100)
-                timeout += timeout
-                continue
 
-        if resp.is_error:
-            print(f'error: Could not GET {TWITCH_STREAMS}: {resp.reason}')
-        else:
-            stream_data = resp.json()['data']
-            _live = frozenset(d['user_name'] for d in stream_data)
-            streamers = { d['user_name'] : d for d in stream_data }
-            now = datetime.utcnow()
-            for streamer in (_live - live):
-                stream_data = streamers[streamer]
-                starttime = datetime.strptime(
-                    stream_data['started_at'],
-                    TWITCH_DATE_FMT
-                )
-                delta = now - starttime
-                if timedelta(0) < delta <= timedelta(minutes=5):
-                    title = stream_data['title']
-                    msg = f'{streamer} is playing {title} at {TWITCH_TV}/{streamer}!'
-                    await bot.send_room(room, msg)
-            live = _live
+            if resp.is_error:
+                print(f'error: Could not GET {TWITCH_STREAMS}: {resp.reason}')
+            else:
+                stream_data = resp.json()['data']
+                _live = frozenset(d['user_name'] for d in stream_data)
+                streamers = { d['user_name'] : d for d in stream_data }
+                now = datetime.utcnow()
+                for streamer in (_live - live):
+                    stream_data = streamers[streamer]
+                    starttime = datetime.strptime(
+                        stream_data['started_at'],
+                        TWITCH_DATE_FMT
+                    )
+                    delta = now - starttime
+                    if timedelta(0) < delta <= timedelta(minutes=5):
+                        title = stream_data['title']
+                        msg = f'{streamer} is playing {title} at {TWITCH_TV}/{streamer}!'
+                        await bot.send_room(room, msg)
+                live = _live
+        except BaseException as e:
+            print(e)
+
         await asyncio.sleep(30)
 
 async def twitch_db(bot, twitch_client_id, room, event):
